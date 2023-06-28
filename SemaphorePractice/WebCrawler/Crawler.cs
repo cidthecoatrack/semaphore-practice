@@ -12,9 +12,9 @@ namespace SemaphorePractice.WebCrawler
         public DownloadDelegate Download { get; set; }
         public GetUrlsDelegate GetUrls { get; set; }
 
-        public Crawler()
+        public Crawler(int maxConcurrency = 8)
         {
-            semaphore = new Semaphore(10, 10);
+            semaphore = new Semaphore(maxConcurrency, maxConcurrency);
         }
 
         public async Task<IDictionary<string, Page>> Crawl(IEnumerable<string> urls, CancellationToken token)
@@ -41,17 +41,31 @@ namespace SemaphorePractice.WebCrawler
 
         private async Task CrawlUrl(string url, ConcurrentDictionary<string, Page> existingPages, CancellationToken token)
         {
-            semaphore.WaitOne();
+            try
+            {
+                //semaphore.WaitOne();
 
-            var page = await Download(url);
-            existingPages.TryAdd(url, page);
+                if (PageAlreadyCrawled(existingPages, url))
+                    return;
 
-            var subUrls = await GetUrls(page);
+                var page = await Download(url);
+                var added = existingPages.TryAdd(url, page);
+                if (!added)
+                    return;
 
-            semaphore.Release();
+                var subUrls = await GetUrls(page);
+                await CrawlRecursive(subUrls, existingPages, token);
 
-            var newUrls = subUrls.Where(u => !existingPages.ContainsKey(u));
-            await CrawlRecursive(newUrls, existingPages, token);
+                //var newUrls = subUrls.Where(u => !PageAlreadyCrawled(existingPages, u));
+                //await CrawlRecursive(newUrls, existingPages, token);
+            }
+            finally
+            {
+                //semaphore.Release();
+            }
         }
+
+        private bool PageAlreadyCrawled(ConcurrentDictionary<string, Page> existingPages, string url)
+            => existingPages.TryGetValue(url, out var junk);
     }
 }

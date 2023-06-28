@@ -182,10 +182,19 @@
 
             mockUrls["content 1"] = new[] { "url1" };
 
+            var downloadCount = 0;
+            crawler.Download = async (string url) =>
+            {
+                Interlocked.Increment(ref downloadCount);
+                return await DownloadMock(url);
+            };
+
             var pages = await crawler.Crawl(urls, default);
             Assert.That(pages, Has.Count.EqualTo(1)
                 .And.ContainKey("url1"));
             Assert.That(pages["url1"], Is.EqualTo(mockPages[0]));
+
+            Assert.That(downloadCount, Is.EqualTo(1));
         }
 
         [Test]
@@ -198,12 +207,21 @@
             mockUrls["content 1"] = new[] { "url1.1" };
             mockUrls["content 1.1"] = new[] { "url1" };
 
+            var downloadCount = 0;
+            crawler.Download = async (string url) =>
+            {
+                Interlocked.Increment(ref downloadCount);
+                return await DownloadMock(url);
+            };
+
             var pages = await crawler.Crawl(urls, default);
             Assert.That(pages, Has.Count.EqualTo(2)
                 .And.ContainKey("url1")
                 .And.ContainKey("url1.1"));
             Assert.That(pages["url1"], Is.EqualTo(mockPages[0]));
             Assert.That(pages["url1.1"], Is.EqualTo(mockPages[1]));
+
+            Assert.That(downloadCount, Is.EqualTo(2));
         }
 
         [Test]
@@ -218,6 +236,13 @@
             mockUrls["content 1.1"] = new[] { "url1.1.1" };
             mockUrls["content 1.1.1"] = new[] { "url1" };
 
+            var downloadCount = 0;
+            crawler.Download = async (string url) =>
+            {
+                Interlocked.Increment(ref downloadCount);
+                return await DownloadMock(url);
+            };
+
             var pages = await crawler.Crawl(urls, default);
             Assert.That(pages, Has.Count.EqualTo(3)
                 .And.ContainKey("url1")
@@ -226,24 +251,213 @@
             Assert.That(pages["url1"], Is.EqualTo(mockPages[0]));
             Assert.That(pages["url1.1"], Is.EqualTo(mockPages[1]));
             Assert.That(pages["url1.1.1"], Is.EqualTo(mockPages[2]));
+
+            Assert.That(downloadCount, Is.EqualTo(3));
+        }
+
+        [Test]
+        public async Task GetWholePageTree_WithDuplicates()
+        {
+            var urls = new[] { "url1", "url2" };
+            mockPages.Add(new Page("url1", "content 1"));
+            mockPages.Add(new Page("url1.1", "content 1.1"));
+            mockPages.Add(new Page("url1.1.1", "content 1.1.1"));
+            mockPages.Add(new Page("url1.1.2", "content 1.1.2"));
+            mockPages.Add(new Page("url1.2", "content 1.2"));
+            mockPages.Add(new Page("url1.2.1", "content 1.2.1"));
+            mockPages.Add(new Page("url1.2.2", "content 1.2.2"));
+            mockPages.Add(new Page("url2", "content 2"));
+            mockPages.Add(new Page("url2.1", "content 2.1"));
+            mockPages.Add(new Page("url2.1.1", "content 2.1.1"));
+            mockPages.Add(new Page("url2.1.2", "content 2.1.2"));
+            mockPages.Add(new Page("url2.2", "content 2.2"));
+            mockPages.Add(new Page("url2.2.1", "content 2.2.1"));
+            mockPages.Add(new Page("url2.2.2", "content 2.2.2"));
+
+            mockUrls["content 1"] = new[] { "url1.1", "url1.2", "url1.1.2", "url1.2.1" };
+            mockUrls["content 1.1"] = new[] { "url1.1.1", "url1.1.2" };
+            mockUrls["content 1.1.1"] = new[] { "url1.1", "url1", };
+            mockUrls["content 1.1.2"] = new[] { "url1", "url1.1", "url2" };
+            mockUrls["content 1.2"] = new[] { "url1.2.1", "url1.2.2" };
+            mockUrls["content 1.2.1"] = new[] { "url1.2.1", "url1.2.2" };
+            mockUrls["content 1.2.2"] = new[] { "url1.2.2", "url1.2.1" };
+            mockUrls["content 2"] = new[] { "url2.1", "url2.2" };
+            mockUrls["content 2.1"] = new[] { "url2.1.1", "url2.1.2" };
+            mockUrls["content 2.1.1"] = new[] { "url2", "url2.1", "url1" };
+            mockUrls["content 2.1.2"] = new[] { "url2.1", "url2" };
+            mockUrls["content 2.2"] = new[] { "url2.2.1", "url2.2.2" };
+            mockUrls["content 2.2.1"] = new[] { "url2.2.1", "url2.2.2" };
+            mockUrls["content 2.2.2"] = new[] { "url2.2.2", "url2.2.1" };
+
+            var downloadCount = 0;
+            crawler.Download = async (string url) =>
+            {
+                Interlocked.Increment(ref downloadCount);
+                return await DownloadMock(url);
+            };
+
+            var pages = await crawler.Crawl(urls, default);
+            Assert.That(pages, Has.Count.EqualTo(14)
+                .And.ContainKey("url1")
+                .And.ContainKey("url1.1")
+                .And.ContainKey("url1.2")
+                .And.ContainKey("url1.1.1")
+                .And.ContainKey("url1.1.2")
+                .And.ContainKey("url1.2.1")
+                .And.ContainKey("url1.2.2")
+                .And.ContainKey("url2")
+                .And.ContainKey("url2.1")
+                .And.ContainKey("url2.2")
+                .And.ContainKey("url2.1.1")
+                .And.ContainKey("url2.1.2")
+                .And.ContainKey("url2.2.1")
+                .And.ContainKey("url2.2.2"));
+            Assert.That(pages["url1"], Is.EqualTo(mockPages[0]));
+            Assert.That(pages["url1.1"], Is.EqualTo(mockPages[1]));
+            Assert.That(pages["url1.2"], Is.EqualTo(mockPages[4]));
+            Assert.That(pages["url1.1.1"], Is.EqualTo(mockPages[2]));
+            Assert.That(pages["url1.1.2"], Is.EqualTo(mockPages[3]));
+            Assert.That(pages["url1.2.1"], Is.EqualTo(mockPages[5]));
+            Assert.That(pages["url1.2.2"], Is.EqualTo(mockPages[6]));
+            Assert.That(pages["url2"], Is.EqualTo(mockPages[7]));
+            Assert.That(pages["url2.1"], Is.EqualTo(mockPages[8]));
+            Assert.That(pages["url2.2"], Is.EqualTo(mockPages[11]));
+            Assert.That(pages["url2.1.1"], Is.EqualTo(mockPages[9]));
+            Assert.That(pages["url2.1.2"], Is.EqualTo(mockPages[10]));
+            Assert.That(pages["url2.2.1"], Is.EqualTo(mockPages[12]));
+            Assert.That(pages["url2.2.2"], Is.EqualTo(mockPages[13]));
+
+            Assert.That(downloadCount, Is.EqualTo(14));
+        }
+
+        [Test]
+        public async Task GetWholePageTree_WithDuplicates_IsPerformant()
+        {
+            var urls = new[] { "url1", "url2" };
+            mockPages.Add(new Page("url1", "content 1"));
+            mockPages.Add(new Page("url1.1", "content 1.1"));
+            mockPages.Add(new Page("url1.1.1", "content 1.1.1"));
+            mockPages.Add(new Page("url1.1.2", "content 1.1.2"));
+            mockPages.Add(new Page("url1.2", "content 1.2"));
+            mockPages.Add(new Page("url1.2.1", "content 1.2.1"));
+            mockPages.Add(new Page("url1.2.2", "content 1.2.2"));
+            mockPages.Add(new Page("url2", "content 2"));
+            mockPages.Add(new Page("url2.1", "content 2.1"));
+            mockPages.Add(new Page("url2.1.1", "content 2.1.1"));
+            mockPages.Add(new Page("url2.1.2", "content 2.1.2"));
+            mockPages.Add(new Page("url2.2", "content 2.2"));
+            mockPages.Add(new Page("url2.2.1", "content 2.2.1"));
+            mockPages.Add(new Page("url2.2.2", "content 2.2.2"));
+
+            mockUrls["content 1"] = new[] { "url1.1", "url1.2", "url1.1.2", "url1.2.1" };
+            mockUrls["content 1.1"] = new[] { "url1.1.1", "url1.1.2" };
+            mockUrls["content 1.1.1"] = new[] { "url1.1", "url1", };
+            mockUrls["content 1.1.2"] = new[] { "url1", "url1.1", "url2" };
+            mockUrls["content 1.2"] = new[] { "url1.2.1", "url1.2.2" };
+            mockUrls["content 1.2.1"] = new[] { "url1.2.1", "url1.2.2" };
+            mockUrls["content 1.2.2"] = new[] { "url1.2.2", "url1.2.1" };
+            mockUrls["content 2"] = new[] { "url2.1", "url2.2" };
+            mockUrls["content 2.1"] = new[] { "url2.1.1", "url2.1.2" };
+            mockUrls["content 2.1.1"] = new[] { "url2", "url2.1", "url1" };
+            mockUrls["content 2.1.2"] = new[] { "url2.1", "url2" };
+            mockUrls["content 2.2"] = new[] { "url2.2.1", "url2.2.2" };
+            mockUrls["content 2.2.1"] = new[] { "url2.2.1", "url2.2.2" };
+            mockUrls["content 2.2.2"] = new[] { "url2.2.2", "url2.2.1" };
+
+            var downloadCount = 0;
+            crawler.Download = async (string url) =>
+            {
+                Interlocked.Increment(ref downloadCount);
+                return await DownloadMock(url);
+            };
+
+            var getUrlCount = 0;
+            crawler.GetUrls = async (Page p) =>
+            {
+                await Task.Delay(10);
+                Interlocked.Increment(ref getUrlCount);
+
+                return await GetMockUrls(p);
+            };
+
+            var start = DateTime.UtcNow;
+            var pages = await crawler.Crawl(urls, default);
+            var end = DateTime.UtcNow;
+
+            Assert.That(pages, Has.Count.EqualTo(14)
+                .And.ContainKey("url1")
+                .And.ContainKey("url1.1")
+                .And.ContainKey("url1.2")
+                .And.ContainKey("url1.1.1")
+                .And.ContainKey("url1.1.2")
+                .And.ContainKey("url1.2.1")
+                .And.ContainKey("url1.2.2")
+                .And.ContainKey("url2")
+                .And.ContainKey("url2.1")
+                .And.ContainKey("url2.2")
+                .And.ContainKey("url2.1.1")
+                .And.ContainKey("url2.1.2")
+                .And.ContainKey("url2.2.1")
+                .And.ContainKey("url2.2.2"));
+            Assert.That(pages["url1"], Is.EqualTo(mockPages[0]));
+            Assert.That(pages["url1.1"], Is.EqualTo(mockPages[1]));
+            Assert.That(pages["url1.2"], Is.EqualTo(mockPages[4]));
+            Assert.That(pages["url1.1.1"], Is.EqualTo(mockPages[2]));
+            Assert.That(pages["url1.1.2"], Is.EqualTo(mockPages[3]));
+            Assert.That(pages["url1.2.1"], Is.EqualTo(mockPages[5]));
+            Assert.That(pages["url1.2.2"], Is.EqualTo(mockPages[6]));
+            Assert.That(pages["url2"], Is.EqualTo(mockPages[7]));
+            Assert.That(pages["url2.1"], Is.EqualTo(mockPages[8]));
+            Assert.That(pages["url2.2"], Is.EqualTo(mockPages[11]));
+            Assert.That(pages["url2.1.1"], Is.EqualTo(mockPages[9]));
+            Assert.That(pages["url2.1.2"], Is.EqualTo(mockPages[10]));
+            Assert.That(pages["url2.2.1"], Is.EqualTo(mockPages[12]));
+            Assert.That(pages["url2.2.2"], Is.EqualTo(mockPages[13]));
+
+            Assert.That(downloadCount, Is.EqualTo(14));
+            Assert.That(getUrlCount, Is.EqualTo(14));
+
+            Assert.That(end - start, Is.LessThan(TimeSpan.FromMilliseconds(140)));
         }
 
         [TestCase(2, 2)]
         [TestCase(2, 3)]
+        [TestCase(2, 5)]
         [TestCase(2, 10)]
         [TestCase(3, 2)]
         [TestCase(3, 3)]
-        [TestCase(3, 10)]
+        [TestCase(3, 5)]
+        [TestCase(3, 10, Ignore = "too many permutations, too slow")]
+        [TestCase(5, 2)]
+        [TestCase(5, 3)]
+        [TestCase(5, 5)]
         [TestCase(10, 2)]
         [TestCase(10, 3)]
-        [TestCase(10, 10, Ignore = "too many permutations")]
+        [TestCase(10, 5, Ignore = "too many permutations, too slow")]
+        [TestCase(20, 2)]
+        [TestCase(20, 3)]
+        [TestCase(30, 2)]
+        [TestCase(30, 3, Ignore = "too many permutations, too slow")]
+        [TestCase(40, 2)]
+        [TestCase(50, 2)]
+        [TestCase(100, 2)]
         public async Task CrawlLargeTree_IsPerformant(int breadth, int depth)
         {
             var urls = BuildLargeTree(breadth, depth);
 
+            var downloadCount = 0;
+            crawler.Download = async (string url) =>
+            {
+                Interlocked.Increment(ref downloadCount);
+                return await DownloadMock(url);
+            };
+
+            var getUrlCount = 0;
             crawler.GetUrls = async (Page p) =>
             {
                 await Task.Delay(10);
+                Interlocked.Increment(ref getUrlCount);
+
                 return await GetMockUrls(p);
             };
 
@@ -259,6 +473,10 @@
             }
 
             Assert.That(pages, Has.Count.EqualTo(expectedCount));
+
+            Assert.That(downloadCount, Is.EqualTo(expectedCount));
+            Assert.That(getUrlCount, Is.EqualTo(expectedCount));
+
             Assert.That(end - start, Is.LessThan(TimeSpan.FromMilliseconds(expectedCount * 10)));
         }
 
@@ -284,6 +502,176 @@
             }
 
             return urls;
+        }
+
+        [Test]
+        public async Task GetWholePageTree_WithDuplicates_ManagesConcurrency()
+        {
+            var urls = new[] { "url1", "url2" };
+            mockPages.Add(new Page("url1", "content 1"));
+            mockPages.Add(new Page("url1.1", "content 1.1"));
+            mockPages.Add(new Page("url1.1.1", "content 1.1.1"));
+            mockPages.Add(new Page("url1.1.2", "content 1.1.2"));
+            mockPages.Add(new Page("url1.2", "content 1.2"));
+            mockPages.Add(new Page("url1.2.1", "content 1.2.1"));
+            mockPages.Add(new Page("url1.2.2", "content 1.2.2"));
+            mockPages.Add(new Page("url2", "content 2"));
+            mockPages.Add(new Page("url2.1", "content 2.1"));
+            mockPages.Add(new Page("url2.1.1", "content 2.1.1"));
+            mockPages.Add(new Page("url2.1.2", "content 2.1.2"));
+            mockPages.Add(new Page("url2.2", "content 2.2"));
+            mockPages.Add(new Page("url2.2.1", "content 2.2.1"));
+            mockPages.Add(new Page("url2.2.2", "content 2.2.2"));
+
+            mockUrls["content 1"] = new[] { "url1.1", "url1.2", "url1.1.2", "url1.2.1" };
+            mockUrls["content 1.1"] = new[] { "url1.1.1", "url1.1.2" };
+            mockUrls["content 1.1.1"] = new[] { "url1.1", "url1", };
+            mockUrls["content 1.1.2"] = new[] { "url1", "url1.1", "url2" };
+            mockUrls["content 1.2"] = new[] { "url1.2.1", "url1.2.2" };
+            mockUrls["content 1.2.1"] = new[] { "url1.2.1", "url1.2.2" };
+            mockUrls["content 1.2.2"] = new[] { "url1.2.2", "url1.2.1" };
+            mockUrls["content 2"] = new[] { "url2.1", "url2.2" };
+            mockUrls["content 2.1"] = new[] { "url2.1.1", "url2.1.2" };
+            mockUrls["content 2.1.1"] = new[] { "url2", "url2.1", "url1" };
+            mockUrls["content 2.1.2"] = new[] { "url2.1", "url2" };
+            mockUrls["content 2.2"] = new[] { "url2.2.1", "url2.2.2" };
+            mockUrls["content 2.2.1"] = new[] { "url2.2.1", "url2.2.2" };
+            mockUrls["content 2.2.2"] = new[] { "url2.2.2", "url2.2.1" };
+
+            var downloadCount = 0;
+            var current = 0;
+            var max = 0;
+            crawler.Download = async (string url) =>
+            {
+                await Task.Delay(100);
+
+                Interlocked.Increment(ref downloadCount);
+
+                if (current > max)
+                    max = current;
+
+                return await DownloadMock(url);
+            };
+
+            var getUrlCount = 0;
+            crawler.GetUrls = async (Page p) =>
+            {
+                await Task.Delay(100);
+
+                Interlocked.Increment(ref getUrlCount);
+                Interlocked.Decrement(ref current);
+
+                return await GetMockUrls(p);
+            };
+
+            var start = DateTime.UtcNow;
+            var pages = await crawler.Crawl(urls, default);
+            var end = DateTime.UtcNow;
+
+            Assert.That(pages, Has.Count.EqualTo(14)
+                .And.ContainKey("url1")
+                .And.ContainKey("url1.1")
+                .And.ContainKey("url1.2")
+                .And.ContainKey("url1.1.1")
+                .And.ContainKey("url1.1.2")
+                .And.ContainKey("url1.2.1")
+                .And.ContainKey("url1.2.2")
+                .And.ContainKey("url2")
+                .And.ContainKey("url2.1")
+                .And.ContainKey("url2.2")
+                .And.ContainKey("url2.1.1")
+                .And.ContainKey("url2.1.2")
+                .And.ContainKey("url2.2.1")
+                .And.ContainKey("url2.2.2"));
+            Assert.That(pages["url1"], Is.EqualTo(mockPages[0]));
+            Assert.That(pages["url1.1"], Is.EqualTo(mockPages[1]));
+            Assert.That(pages["url1.2"], Is.EqualTo(mockPages[4]));
+            Assert.That(pages["url1.1.1"], Is.EqualTo(mockPages[2]));
+            Assert.That(pages["url1.1.2"], Is.EqualTo(mockPages[3]));
+            Assert.That(pages["url1.2.1"], Is.EqualTo(mockPages[5]));
+            Assert.That(pages["url1.2.2"], Is.EqualTo(mockPages[6]));
+            Assert.That(pages["url2"], Is.EqualTo(mockPages[7]));
+            Assert.That(pages["url2.1"], Is.EqualTo(mockPages[8]));
+            Assert.That(pages["url2.2"], Is.EqualTo(mockPages[11]));
+            Assert.That(pages["url2.1.1"], Is.EqualTo(mockPages[9]));
+            Assert.That(pages["url2.1.2"], Is.EqualTo(mockPages[10]));
+            Assert.That(pages["url2.2.1"], Is.EqualTo(mockPages[12]));
+            Assert.That(pages["url2.2.2"], Is.EqualTo(mockPages[13]));
+
+            Assert.That(downloadCount, Is.EqualTo(14));
+            Assert.That(getUrlCount, Is.EqualTo(14));
+
+            Assert.That(end - start, Is.LessThan(TimeSpan.FromMilliseconds(140)));
+            Assert.That(current, Is.Zero);
+            Assert.That(max, Is.EqualTo(8));
+        }
+
+        [TestCase(2, 2)]
+        [TestCase(2, 3)]
+        [TestCase(2, 5)]
+        [TestCase(2, 10)]
+        [TestCase(3, 2)]
+        [TestCase(3, 3)]
+        [TestCase(3, 5)]
+        [TestCase(3, 10, Ignore = "too many permutations, too slow")]
+        [TestCase(5, 2)]
+        [TestCase(5, 3)]
+        [TestCase(5, 5)]
+        [TestCase(10, 2)]
+        [TestCase(10, 3)]
+        [TestCase(10, 5, Ignore = "too many permutations, too slow")]
+        [TestCase(20, 2)]
+        [TestCase(20, 3)]
+        [TestCase(30, 2)]
+        [TestCase(30, 3, Ignore = "too many permutations, too slow")]
+        [TestCase(40, 2)]
+        [TestCase(50, 2)]
+        [TestCase(100, 2)]
+        public async Task CrawlLargeTree_ManagesConcurrency(int breadth, int depth)
+        {
+            var urls = BuildLargeTree(breadth, depth);
+
+            var downloadCount = 0;
+            var current = 0;
+            var max = 0;
+            crawler.Download = async (string url) =>
+            {
+                Interlocked.Increment(ref downloadCount);
+
+                if (current > max)
+                    max = current;
+
+                return await DownloadMock(url);
+            };
+
+            var getUrlCount = 0;
+            crawler.GetUrls = async (Page p) =>
+            {
+                await Task.Delay(10);
+
+                Interlocked.Increment(ref getUrlCount);
+                Interlocked.Decrement(ref current);
+
+                return await GetMockUrls(p);
+            };
+
+            var start = DateTime.UtcNow;
+            var pages = await crawler.Crawl(urls, default);
+            var end = DateTime.UtcNow;
+
+            double expectedCount = 0;
+            while (depth > 0)
+            {
+                expectedCount += Math.Pow(breadth, depth);
+                depth--;
+            }
+
+            Assert.That(pages, Has.Count.EqualTo(expectedCount));
+
+            Assert.That(downloadCount, Is.EqualTo(expectedCount));
+            Assert.That(getUrlCount, Is.EqualTo(expectedCount));
+
+            Assert.That(end - start, Is.LessThan(TimeSpan.FromMilliseconds(expectedCount * 10)));
         }
     }
 }
