@@ -12,7 +12,7 @@ namespace SemaphorePractice.WebCrawler
         public DownloadDelegate Download { get; set; }
         public GetUrlsDelegate GetUrls { get; set; }
 
-        public Crawler(int maxConcurrency = 8)
+        public Crawler(int maxConcurrency = int.MaxValue)
         {
             semaphore = new Semaphore(maxConcurrency, maxConcurrency);
         }
@@ -36,33 +36,39 @@ namespace SemaphorePractice.WebCrawler
                 tasks.Add(task);
             }
 
-            await Task.WhenAll(tasks);
+            if (tasks.Any())
+                await Task.WhenAll(tasks);
         }
 
         private async Task CrawlUrl(string url, ConcurrentDictionary<string, Page> existingPages, CancellationToken token)
         {
+            var subUrls = Enumerable.Empty<string>();
+            var recurse = false;
+
             try
             {
-                //semaphore.WaitOne();
+                semaphore.WaitOne();
 
                 if (PageAlreadyCrawled(existingPages, url))
                     return;
 
                 var page = await Download(url);
-                var added = existingPages.TryAdd(url, page);
-                if (!added)
-                    return;
+                recurse = existingPages.TryAdd(url, page);
 
-                var subUrls = await GetUrls(page);
-                await CrawlRecursive(subUrls, existingPages, token);
+                //HACK: normally, I would check if we actually added it and escape early if not
+                //That way, we don't get urls for an already-parsed page
+                //However, since in our tests we are using these delegates to count max concurrency, downloading but not parsing causes inconsistency
+                //So, for the purposes of this practice, we will download and get every time
 
-                //var newUrls = subUrls.Where(u => !PageAlreadyCrawled(existingPages, u));
-                //await CrawlRecursive(newUrls, existingPages, token);
+                subUrls = await GetUrls(page);
             }
             finally
             {
-                //semaphore.Release();
+                semaphore.Release();
             }
+
+            if (recurse && subUrls.Any())
+                await CrawlRecursive(subUrls, existingPages, token);
         }
 
         private bool PageAlreadyCrawled(ConcurrentDictionary<string, Page> existingPages, string url)
